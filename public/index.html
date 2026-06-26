@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
+
   <script>
   // usernode-dev-console@1
   (function () {
@@ -66,56 +66,192 @@
   <title>Namer2000</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
+  <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-center gap-8 p-4">
-  <h1 class="text-2xl font-bold">Namer2000</h1>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-start gap-6 p-6">
+  <header class="text-center mt-4">
+    <h1 class="text-2xl font-bold">Namer2000</h1>
+    <p class="text-sm text-zinc-500">One click. One ridiculous, perfect brand.</p>
+  </header>
 
-  <button id="press-btn" class="w-32 h-32 rounded-full bg-violet-600 hover:bg-violet-500 active:scale-95 transition-all text-white text-xl font-bold shadow-lg shadow-violet-600/30">
-    Press!
+  <button id="generate-btn"
+    class="px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-95 transition-all text-white text-lg font-bold shadow-lg shadow-violet-600/30 disabled:opacity-60 disabled:cursor-not-allowed">
+    Generate branding ✨
   </button>
 
-  <div id="count" class="text-lg text-zinc-400">0 total presses</div>
+  <div id="status" class="text-sm text-zinc-400 min-h-[1.25rem] text-center"></div>
 
-  <div class="w-full max-w-sm">
-    <h2 class="text-sm font-medium text-zinc-500 mb-2 text-center">Leaderboard</h2>
-    <div id="leaderboard" class="space-y-1"></div>
-  </div>
+  <!-- Result card; re-tinted to the generated palette on each generation. -->
+  <section id="result" class="hidden w-full max-w-md rounded-2xl border p-6 flex flex-col items-center gap-5 transition-colors"
+    style="background:#18181b;border-color:#27272a">
+    <div id="logo" class="w-32 h-32 flex items-center justify-center overflow-hidden"></div>
+    <div class="text-center">
+      <h2 id="brand-name" class="text-3xl font-extrabold tracking-tight break-words"></h2>
+      <p id="brand-tagline" class="text-sm mt-1 opacity-80"></p>
+    </div>
+    <div id="swatches" class="flex gap-2 flex-wrap justify-center"></div>
+    <div id="pitch" class="text-sm leading-relaxed space-y-3 self-stretch"></div>
+    <p id="demo-note" class="hidden text-xs text-amber-400/80 text-center"></p>
+  </section>
 
   <script>
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token') || '';
     const headers = token ? { 'x-usernode-token': token } : {};
 
-    async function loadLeaderboard() {
-      const res = await fetch('/api/leaderboard', { headers });
-      if (!res.ok) return;
-      const { leaderboard } = await res.json();
-      const el = document.getElementById('leaderboard');
-      if (!leaderboard.length) {
-        el.innerHTML = '<p class="text-center text-zinc-600 text-sm">No presses yet</p>';
-        return;
-      }
-      el.innerHTML = leaderboard.map((r, i) =>
-        '<div class="flex justify-between px-3 py-1 rounded ' + (i === 0 ? 'bg-violet-600/20 text-violet-300' : 'text-zinc-400') + '">' +
-        '<span>' + (i + 1) + '. ' + r.username + '</span>' +
-        '<span class="font-mono">' + r.presses + '</span></div>'
-      ).join('');
-      const total = leaderboard.reduce((s, r) => s + parseInt(r.presses), 0);
-      document.getElementById('count').textContent = total + ' total presses';
+    const btn = document.getElementById('generate-btn');
+    const statusEl = document.getElementById('status');
+    const resultEl = document.getElementById('result');
+
+    function setStatus(msg) { statusEl.textContent = msg || ''; }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+      ));
     }
 
-    document.getElementById('press-btn').addEventListener('click', async () => {
-      try {
-        const res = await fetch('/api/press', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...headers },
-        });
-        if (res.ok) loadLeaderboard();
-        else if (res.status === 401) document.getElementById('count').textContent = 'Sign in to press!';
-      } catch {}
-    });
+    // Minimal, escaped markdown: handles **bold**, *italic*, and paragraphs.
+    function renderPitch(text) {
+      const paras = String(text).split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+      return paras.map((p) => {
+        let html = escapeHtml(p)
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+          .replace(/\n/g, '<br>');
+        return '<p>' + html + '</p>';
+      }).join('');
+    }
 
-    loadLeaderboard();
+    // Sanitize untrusted model SVG before inserting it into the DOM:
+    // require an <svg> root, drop <script>/<foreignObject>, strip on* event
+    // handlers and any off-document href/xlink:href.
+    function sanitizeSvg(raw) {
+      if (typeof raw !== 'string' || !/<svg[\s>]/i.test(raw)) return null;
+      let doc;
+      try { doc = new DOMParser().parseFromString(raw, 'image/svg+xml'); }
+      catch { return null; }
+      const svg = doc.querySelector('svg');
+      if (!svg || doc.querySelector('parsererror')) return null;
+      svg.querySelectorAll('script, foreignObject').forEach((n) => n.remove());
+      doc.querySelectorAll('*').forEach((el) => {
+        for (const attr of Array.from(el.attributes)) {
+          const name = attr.name.toLowerCase();
+          const val = attr.value.trim();
+          if (name.startsWith('on')) { el.removeAttribute(attr.name); continue; }
+          if ((name === 'href' || name === 'xlink:href') && !val.startsWith('#')) {
+            el.removeAttribute(attr.name);
+          }
+        }
+      });
+      svg.setAttribute('width', '100%');
+      svg.setAttribute('height', '100%');
+      return svg.outerHTML;
+    }
+
+    function render(b) {
+      const colors = Array.isArray(b.colors) && b.colors.length ? b.colors : ['#7c3aed', '#22d3ee', '#f8fafc'];
+      const bg = colors.find((c) => c.toLowerCase() !== '#ffffff') || '#18181b';
+      const accent = colors[0];
+      const text = colors[colors.length - 1] || '#f8fafc';
+
+      resultEl.style.background = bg;
+      resultEl.style.borderColor = accent;
+      resultEl.style.color = text;
+
+      const logoEl = document.getElementById('logo');
+      const safeSvg = sanitizeSvg(b.logoSvg);
+      logoEl.innerHTML = safeSvg || '';
+      if (!safeSvg) {
+        logoEl.textContent = (b.name || '?').slice(0, 2).toUpperCase();
+        logoEl.style.color = accent;
+        logoEl.className = 'w-32 h-32 flex items-center justify-center overflow-hidden text-4xl font-black';
+      } else {
+        logoEl.className = 'w-32 h-32 flex items-center justify-center overflow-hidden';
+      }
+
+      const nameEl = document.getElementById('brand-name');
+      nameEl.textContent = b.name || 'Untitled';
+      nameEl.style.color = accent;
+
+      const tagEl = document.getElementById('brand-tagline');
+      tagEl.textContent = b.tagline || '';
+      tagEl.style.display = b.tagline ? '' : 'none';
+
+      document.getElementById('swatches').innerHTML = colors.map((c) =>
+        '<span title="' + escapeHtml(c) + '" class="w-8 h-8 rounded-full border border-white/20" style="background:' + escapeHtml(c) + '"></span>'
+      ).join('');
+
+      document.getElementById('pitch').innerHTML = renderPitch(b.pitch || '');
+
+      const demoNote = document.getElementById('demo-note');
+      if (b.demo) {
+        demoNote.textContent = 'Demo branding — live AI is off in this preview.';
+        demoNote.classList.remove('hidden');
+      } else {
+        demoNote.classList.add('hidden');
+      }
+
+      resultEl.classList.remove('hidden');
+    }
+
+    async function callGenerate() {
+      return fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+      });
+    }
+
+    async function generate() {
+      btn.disabled = true;
+      setStatus('Cooking up something iconic…');
+      try {
+        let res = await callGenerate();
+
+        // First-use / revoked consent: ask the platform for access, then retry once.
+        if (res.status === 403) {
+          setStatus('Namer2000 needs AI access to generate branding…');
+          try {
+            const r = window.usernode && (await window.usernode.requestLlmAccess());
+            if (r && r.granted) {
+              setStatus('Cooking up something iconic…');
+              res = await callGenerate();
+            } else {
+              setStatus('Namer2000 needs AI access to generate branding — tap Generate to allow.');
+              return;
+            }
+          } catch {
+            setStatus('Namer2000 needs AI access to generate branding — tap Generate to allow.');
+            return;
+          }
+        }
+
+        if (res.status === 429) {
+          let code = '';
+          try { code = (await res.json()).code; } catch {}
+          setStatus(code === 'budget_exceeded'
+            ? "You've hit today's overall AI budget — resets at midnight UTC."
+            : "Namer2000 has hit today's AI limit — try again tomorrow.");
+          return;
+        }
+
+        if (!res.ok) {
+          setStatus('The branding machine is jammed. Give it another tap.');
+          return;
+        }
+
+        const branding = await res.json();
+        render(branding);
+        setStatus('');
+      } catch (err) {
+        console.error(err);
+        setStatus('The branding machine is jammed. Give it another tap.');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    btn.addEventListener('click', generate);
   </script>
 </body>
 </html>
