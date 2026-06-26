@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -64,34 +64,98 @@
   })();
   </script>
   <title>Namerama</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>if (window.tailwind) tailwind.config = { darkMode: 'class' };</script>
+
+  <!-- Self-contained styling: no external CDN, so the page renders identically
+       even in network-restricted environments (e.g. the proposal-check runner)
+       with zero failed-resource console errors. -->
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      background: #09090b;
+      color: #f4f4f5;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .header { text-align: center; margin-top: 1rem; }
+    .header h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+    .subtitle { font-size: 0.875rem; color: #71717a; margin: 0.25rem 0 0; }
+
+    #generate-btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 0.75rem;
+      background: #7c3aed;
+      color: #fff;
+      font-size: 1.125rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
+      transition: background 0.15s ease, transform 0.05s ease;
+    }
+    #generate-btn:hover { background: #8b5cf6; }
+    #generate-btn:active { transform: scale(0.95); }
+    #generate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    #status { font-size: 0.875rem; color: #a1a1aa; min-height: 1.25rem; text-align: center; }
+
+    #result {
+      width: 100%;
+      max-width: 28rem;
+      border: 1px solid #27272a;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.25rem;
+      background: #18181b;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+    #logo { width: 8rem; height: 8rem; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    #logo svg { width: 100%; height: 100%; }
+    #logo.mono { font-size: 2.25rem; font-weight: 900; }
+    .brand-block { text-align: center; }
+    #brand-name { font-size: 1.875rem; font-weight: 800; letter-spacing: -0.025em; margin: 0; overflow-wrap: anywhere; }
+    #brand-tagline { font-size: 0.875rem; opacity: 0.8; margin: 0.25rem 0 0; }
+    #swatches { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
+    .swatch { width: 2rem; height: 2rem; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.2); display: inline-block; }
+    #pitch { font-size: 0.875rem; line-height: 1.6; align-self: stretch; }
+    #pitch p { margin: 0 0 0.75rem; }
+    #pitch p:last-child { margin-bottom: 0; }
+    #demo-note { font-size: 0.75rem; color: rgba(251, 191, 36, 0.8); text-align: center; margin: 0; }
+    .hidden { display: none !important; }
+  </style>
+
   <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-start gap-6 p-6">
-  <header class="text-center mt-4">
-    <h1 class="text-2xl font-bold">Namerama</h1>
-    <p class="text-sm text-zinc-500">One click. One ridiculously perfect brand.</p>
+<body>
+  <header class="header">
+    <h1>Namerama</h1>
+    <p class="subtitle">One click. One ridiculously perfect brand.</p>
   </header>
 
-  <button id="generate-btn"
-    class="px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-95 transition-all text-white text-lg font-bold shadow-lg shadow-violet-600/30 disabled:opacity-60 disabled:cursor-not-allowed">
-    Generate branding ✨
-  </button>
+  <button id="generate-btn">Generate branding ✨</button>
 
-  <div id="status" class="text-sm text-zinc-400 min-h-[1.25rem] text-center"></div>
+  <div id="status"></div>
 
   <!-- Result card; re-tinted to the generated palette on each generation. -->
-  <section id="result" class="hidden w-full max-w-md rounded-2xl border p-6 flex flex-col items-center gap-5 transition-colors"
-    style="background:#18181b;border-color:#27272a">
-    <div id="logo" class="w-32 h-32 flex items-center justify-center overflow-hidden"></div>
-    <div class="text-center">
-      <h2 id="brand-name" class="text-3xl font-extrabold tracking-tight break-words"></h2>
-      <p id="brand-tagline" class="text-sm mt-1 opacity-80"></p>
+  <section id="result" class="hidden">
+    <div id="logo"></div>
+    <div class="brand-block">
+      <h2 id="brand-name"></h2>
+      <p id="brand-tagline"></p>
     </div>
-    <div id="swatches" class="flex gap-2 flex-wrap justify-center"></div>
-    <div id="pitch" class="text-sm leading-relaxed space-y-3 self-stretch"></div>
-    <p id="demo-note" class="hidden text-xs text-amber-400/80 text-center"></p>
+    <div id="swatches"></div>
+    <div id="pitch"></div>
+    <p id="demo-note" class="hidden"></p>
   </section>
 
   <script>
@@ -161,13 +225,14 @@
 
       const logoEl = document.getElementById('logo');
       const safeSvg = sanitizeSvg(b.logoSvg);
-      logoEl.innerHTML = safeSvg || '';
-      if (!safeSvg) {
-        logoEl.textContent = (b.name || '?').slice(0, 2).toUpperCase();
-        logoEl.style.color = accent;
-        logoEl.className = 'w-32 h-32 flex items-center justify-center overflow-hidden text-4xl font-black';
+      if (safeSvg) {
+        logoEl.innerHTML = safeSvg;
+        logoEl.classList.remove('mono');
+        logoEl.style.color = '';
       } else {
-        logoEl.className = 'w-32 h-32 flex items-center justify-center overflow-hidden';
+        logoEl.textContent = (b.name || '?').slice(0, 2).toUpperCase();
+        logoEl.classList.add('mono');
+        logoEl.style.color = accent;
       }
 
       const nameEl = document.getElementById('brand-name');
@@ -179,7 +244,7 @@
       tagEl.style.display = b.tagline ? '' : 'none';
 
       document.getElementById('swatches').innerHTML = colors.map((c) =>
-        '<span title="' + escapeHtml(c) + '" class="w-8 h-8 rounded-full border border-white/20" style="background:' + escapeHtml(c) + '"></span>'
+        '<span class="swatch" title="' + escapeHtml(c) + '" style="background:' + escapeHtml(c) + '"></span>'
       ).join('');
 
       document.getElementById('pitch').innerHTML = renderPitch(b.pitch || '');
@@ -209,19 +274,22 @@
         let res = await callGenerate();
 
         // First-use / revoked consent: ask the platform for access, then retry once.
+        // window.usernode comes from the hosted bridge; guard in case it isn't loaded.
         if (res.status === 403) {
-          setStatus('Namer2000 needs AI access to generate branding…');
+          setStatus('Namerama needs AI access to generate branding…');
           try {
-            const r = window.usernode && (await window.usernode.requestLlmAccess());
+            const r = window.usernode && window.usernode.requestLlmAccess
+              ? await window.usernode.requestLlmAccess()
+              : null;
             if (r && r.granted) {
               setStatus('Cooking up something iconic…');
               res = await callGenerate();
             } else {
-              setStatus('Namer2000 needs AI access to generate branding — tap Generate to allow.');
+              setStatus('Namerama needs AI access to generate branding — tap Generate to allow.');
               return;
             }
           } catch {
-            setStatus('Namer2000 needs AI access to generate branding — tap Generate to allow.');
+            setStatus('Namerama needs AI access to generate branding — tap Generate to allow.');
             return;
           }
         }
@@ -231,7 +299,7 @@
           try { code = (await res.json()).code; } catch {}
           setStatus(code === 'budget_exceeded'
             ? "You've hit today's overall AI budget — resets at midnight UTC."
-            : "Namer2000 has hit today's AI limit — try again tomorrow.");
+            : "Namerama has hit today's AI limit — try again tomorrow.");
           return;
         }
 
