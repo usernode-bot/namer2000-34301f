@@ -1,3 +1,11 @@
 {
-  "secrets": []
+  "name": "Namerama",
+  "secrets": [],
+  "llm": {
+    "purpose": "Generates a brand name, logo, and pitch for your project.",
+    "suggested_daily_cap_cents": 200
+  },
+  "tests": [
+    { "name": "Generator renders", "path": "/", "expectSelector": "#generate-btn", "expectText": "Generate branding" }
+  ]
 }
