@@ -14,7 +14,13 @@ const LLM_MODEL = 'claude-sonnet-4-6';
 // Paths that stay open without authentication. Add a path here (and add it
 // with `app.get`/`app.post` below) if you deliberately want it public.
 // Everything else requires a valid platform-issued JWT.
-const PUBLIC_API_PATHS = new Set(['/health']);
+//
+// `/api/generate` is intentionally public: with no live proxy (staging) or no
+// user token it only ever returns the canned, obviously-fake DEMO payload —
+// no user data, no budget spend — so previews and the automated proposal
+// checks render a result instead of logging a 401 console error. A real,
+// billed LLM call still requires the user's forwarded token (see below).
+const PUBLIC_API_PATHS = new Set(['/health', '/api/generate']);
 
 app.use(express.json());
 
@@ -133,8 +139,13 @@ const SYSTEM_PROMPT = [
 ].join('\n');
 
 app.post('/api/generate', async (req, res) => {
-  // No live proxy (staging / standalone) — serve the demo payload.
-  if (!LLM_ENABLED) {
+  const userToken = req.headers['x-usernode-token'];
+
+  // No live proxy (staging / standalone), or no signed-in user to bill the
+  // call to (anonymous preview / automated checks) — serve the demo payload.
+  // This keeps the endpoint public-safe: it never errors and never spends a
+  // user's budget without their token.
+  if (!LLM_ENABLED || !userToken) {
     return res.json({ ...DEMO_BRANDING, demo: true });
   }
 

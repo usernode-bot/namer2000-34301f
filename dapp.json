@@ -5,6 +5,6 @@
     "suggested_daily_cap_cents": 200
   },
   "tests": [
-    { "name": "Generator renders", "path": "/", "expectText": "Generate branding" }
+    { "name": "Generator renders", "path": "/", "expectSelector": "#generate-btn", "expectText": "Generate branding" }
   ]
 }
