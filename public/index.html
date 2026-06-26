@@ -65,7 +65,7 @@
   </script>
   <title>Namerama</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>tailwind.config = { darkMode: 'class' }</script>
+  <script>if (window.tailwind) tailwind.config = { darkMode: 'class' };</script>
   <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-start gap-6 p-6">
