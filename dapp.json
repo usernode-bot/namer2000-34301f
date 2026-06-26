@@ -1,4 +1,5 @@
 {
+  "name": "Namerama",
   "secrets": [],
   "llm": {
     "purpose": "Generates a brand name, logo, and pitch for your project.",
