@@ -1,3 +1,7 @@
 {
-  "secrets": []
+  "secrets": [],
+  "tests": [
+    { "name": "Leaderboard renders", "path": "/", "expectText": "Leaderboard" },
+    { "name": "Shared result deep-link", "path": "/?result=Staging%20demo%20Grace", "expectText": "Showing" }
+  ]
 }

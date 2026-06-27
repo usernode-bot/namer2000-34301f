@@ -7,6 +7,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const JWT_SECRET = process.env.JWT_SECRET;
+const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 
 // Paths that stay open without authentication. Add a path here (and add it
 // with `app.get`/`app.post` below) if you deliberately want it public.
@@ -92,7 +93,32 @@ async function start() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await seedStaging();
   app.listen(port, () => console.log(`Listening on :${port}`));
+}
+
+// Staging-only mock standings so the leaderboard renders multiple rows and the
+// Share deep-link (`?result=…`) can be demoed against fresh, empty staging DBs.
+// No-op in production. Idempotent: skips if demo standings already exist.
+async function seedStaging() {
+  if (!IS_STAGING) return;
+  const { rows } = await pool.query(
+    `SELECT 1 FROM presses WHERE username LIKE 'Staging demo %' LIMIT 1`
+  );
+  if (rows.length) return;
+  const demo = [
+    { user_id: 900001, username: 'Staging demo Ada', presses: 5 },
+    { user_id: 900002, username: 'Staging demo Grace', presses: 3 },
+    { user_id: 900003, username: 'Staging demo Lin', presses: 1 },
+  ];
+  for (const d of demo) {
+    for (let i = 0; i < d.presses; i++) {
+      await pool.query(
+        `INSERT INTO presses (user_id, username) VALUES ($1, $2)`,
+        [d.user_id, d.username]
+      );
+    }
+  }
 }
 
 start().catch(err => { console.error(err); process.exit(1); });
