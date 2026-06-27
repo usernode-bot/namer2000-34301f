@@ -78,30 +78,151 @@
 
   <div class="w-full max-w-sm">
     <h2 class="text-sm font-medium text-zinc-500 mb-2 text-center">Leaderboard</h2>
+    <div id="result-banner" class="hidden mb-2 flex items-center justify-between gap-2 px-3 py-2 rounded bg-amber-400/10 ring-1 ring-amber-400/40 text-amber-200 text-sm"></div>
     <div id="leaderboard" class="space-y-1"></div>
   </div>
+
+  <!-- Confirmation toast (clipboard copy result) -->
+  <div id="toast" role="status" aria-live="polite"
+       class="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-zinc-800 text-zinc-100 text-sm shadow-lg shadow-black/40 opacity-0 pointer-events-none transition-opacity duration-200"></div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token') || '';
     const headers = token ? { 'x-usernode-token': token } : {};
 
+    const HIGHLIGHT = ['ring-2', 'ring-amber-400', 'bg-amber-400/10'];
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+      ));
+    }
+
+    // Toast — reused for both success and failure; a single timer so rapid
+    // taps don't stack.
+    let toastTimer;
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.remove('opacity-0');
+      t.classList.add('opacity-100');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        t.classList.add('opacity-0');
+        t.classList.remove('opacity-100');
+      }, 1500);
+    }
+
+    // Clipboard write with a fallback for non-secure contexts / blocked iframes.
+    async function copyText(text) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch {}
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch {
+        return false;
+      }
+    }
+
+    // Build a token-stripped deep-link to a player's standing.
+    function shareLinkFor(username) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('token');
+      url.searchParams.set('result', username);
+      url.hash = '';
+      return url.toString();
+    }
+
+    async function copyShareLink(username) {
+      const ok = await copyText(shareLinkFor(username));
+      showToast(ok ? 'Link copied!' : "Couldn't copy — try again");
+    }
+
+    function clearResultParam() {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('result');
+      history.replaceState(null, '', url.toString());
+    }
+
+    // Highlight + banner for an incoming `?result=` deep-link. Re-applied after
+    // every render since the leaderboard re-renders on each press.
+    function applyResultHighlight(leaderboard) {
+      const banner = document.getElementById('result-banner');
+      const result = new URLSearchParams(window.location.search).get('result');
+      if (!result) { banner.classList.add('hidden'); return; }
+
+      const dismiss = '<button id="dismiss-result" aria-label="Dismiss" class="shrink-0 text-amber-300/70 hover:text-amber-100 text-lg leading-none">&times;</button>';
+      const idx = leaderboard.findIndex(r => r.username === result);
+
+      if (idx === -1) {
+        banner.innerHTML = '<span>' + escapeHtml(result) + " isn't in the top 50 right now.</span>" + dismiss;
+      } else {
+        const r = leaderboard[idx];
+        banner.innerHTML = '<span>Showing ' + escapeHtml(result) + "'s result — rank " +
+          (idx + 1) + ', ' + r.presses + ' presses.</span>' + dismiss;
+        const row = document.querySelectorAll('.leaderboard-row')[idx];
+        if (row) {
+          row.classList.add(...HIGHLIGHT);
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+      banner.classList.remove('hidden');
+
+      const db = document.getElementById('dismiss-result');
+      if (db) db.addEventListener('click', () => {
+        clearResultParam();
+        banner.classList.add('hidden');
+        document.querySelectorAll('.leaderboard-row').forEach(row => row.classList.remove(...HIGHLIGHT));
+      });
+    }
+
     async function loadLeaderboard() {
       const res = await fetch('/api/leaderboard', { headers });
       if (!res.ok) return;
       const { leaderboard } = await res.json();
       const el = document.getElementById('leaderboard');
+
       if (!leaderboard.length) {
         el.innerHTML = '<p class="text-center text-zinc-600 text-sm">No presses yet</p>';
+        applyResultHighlight(leaderboard);
         return;
       }
-      el.innerHTML = leaderboard.map((r, i) =>
-        '<div class="flex justify-between px-3 py-1 rounded ' + (i === 0 ? 'bg-violet-600/20 text-violet-300' : 'text-zinc-400') + '">' +
-        '<span>' + (i + 1) + '. ' + r.username + '</span>' +
-        '<span class="font-mono">' + r.presses + '</span></div>'
-      ).join('');
+
+      el.innerHTML = leaderboard.map((r, i) => {
+        const u = escapeHtml(r.username);
+        return '<div class="leaderboard-row flex items-center justify-between gap-2 px-3 py-1 rounded ' +
+          (i === 0 ? 'bg-violet-600/20 text-violet-300' : 'text-zinc-400') + '" data-username="' + u + '">' +
+          '<span class="truncate">' + (i + 1) + '. ' + u + '</span>' +
+          '<span class="flex items-center gap-3 shrink-0">' +
+            '<span class="font-mono">' + r.presses + '</span>' +
+            '<button class="share-btn text-xs text-zinc-500 hover:text-violet-300 transition-colors" ' +
+            'data-username="' + u + '" title="Copy a link to this standing" aria-label="Share ' + u + "'s result\">Share</button>" +
+          '</span></div>';
+      }).join('');
+
+      el.querySelectorAll('.share-btn').forEach(btn =>
+        btn.addEventListener('click', () => copyShareLink(btn.dataset.username))
+      );
+
       const total = leaderboard.reduce((s, r) => s + parseInt(r.presses), 0);
       document.getElementById('count').textContent = total + ' total presses';
+
+      applyResultHighlight(leaderboard);
     }
 
     document.getElementById('press-btn').addEventListener('click', async () => {
